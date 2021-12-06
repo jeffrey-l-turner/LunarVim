@@ -14,7 +14,6 @@ declare -r LUNARVIM_RUNTIME_DIR="${LUNARVIM_RUNTIME_DIR:-"$XDG_DATA_HOME/lunarvi
 declare -r LUNARVIM_CONFIG_DIR="${LUNARVIM_CONFIG_DIR:-"$XDG_CONFIG_HOME/lvim"}"
 # TODO: Use a dedicated cache directory #1256
 declare -r LUNARVIM_CACHE_DIR="$XDG_CACHE_HOME/nvim"
-declare -r LUNARVIM_PACK_DIR="$LUNARVIM_RUNTIME_DIR/site/pack"
 
 declare BASEDIR
 BASEDIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
@@ -114,8 +113,6 @@ function main() {
     done
   fi
 
-  install_packer
-
   if [ -e "$LUNARVIM_RUNTIME_DIR/lvim/init.lua" ]; then
     update_lvim
   else
@@ -177,6 +174,17 @@ function print_missing_dep_msg() {
   fi
 }
 
+function check_neovim_min_version() {
+  # TODO: consider locking the requirement to 0.6+
+  local verify_version_cmd='if !has("nvim-0.5.1") | cquit | else | quit | endif'
+
+  # exit with an error if min_version not found
+  if ! nvim --headless -u NONE -c "$verify_version_cmd"; then
+    echo "[ERROR]: LunarVim requires at least Neovim v0.5.1 or higher"
+    exit 1
+  fi
+}
+
 function check_system_deps() {
   if ! command -v git &>/dev/null; then
     print_missing_dep_msg "git"
@@ -186,6 +194,7 @@ function check_system_deps() {
     print_missing_dep_msg "neovim"
     exit 1
   fi
+  check_neovim_min_version
 }
 
 function __install_nodejs_deps_npm() {
@@ -280,18 +289,6 @@ function backup_old_config() {
   echo "Backup operation complete"
 }
 
-function install_packer() {
-  if [ -e "$LUNARVIM_PACK_DIR/packer/start/packer.nvim" ]; then
-    msg "Packer already installed"
-  else
-    if ! git clone --depth 1 "https://github.com/wbthomason/packer.nvim" \
-      "$LUNARVIM_PACK_DIR/packer/start/packer.nvim"; then
-      msg "Failed to clone Packer. Installation failed."
-      exit 1
-    fi
-  fi
-}
-
 function clone_lvim() {
   msg "Cloning LunarVim configuration"
   if ! git clone --branch "$LV_BRANCH" \
@@ -351,9 +348,9 @@ function setup_lvim() {
 
   setup_shim
 
-  echo "Preparing Packer setup"
-
   cp "$LUNARVIM_RUNTIME_DIR/lvim/utils/installer/config.example.lua" "$LUNARVIM_CONFIG_DIR/config.lua"
+
+  echo "Preparing Packer setup"
 
   "$INSTALL_PREFIX/bin/lvim" --headless \
     -c 'autocmd User PackerComplete quitall' \
